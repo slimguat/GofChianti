@@ -15,8 +15,6 @@ abundance set.
 
 ```bash
 pip install gofchianti
-# or, from a source checkout:
-poetry install
 ```
 
 ## Quick start

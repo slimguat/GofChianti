@@ -1,4 +1,4 @@
-"""GofChianti — lightweight Python access to precomputed CHIANTI G(T, n_e).
+"""GofChianti — lightweight Python access to precomputed CHIANTI G(n_e, T).
 
 Typical use::
 
@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from typing import Optional, Union
 from pathlib import Path
+import tomllib
+from importlib.metadata import version as _get_installed_version, PackageNotFoundError
 
 from .abundance import Abundance, available_abundances
 from .catalog import available_lines
@@ -30,8 +32,42 @@ from .fetch import (
     set_cache_dir,
     set_dataset_dir,
 )
+from .utils import _vprint
 
-__version__ = "0.1.0"
+
+def version(verbose=0) -> str:
+    """Return the package version.
+
+    Prefer the installed distribution (importlib.metadata). Fall back to
+    reading the repository's pyproject.toml via `tomllib`.
+    """
+    try:
+        return _get_installed_version("gofchianti")
+    except Exception:
+        _vprint(verbose, 2, "Package not found, falling back to pyproject.toml")
+        pass
+
+    try:
+        py = Path(__file__).resolve().parents[2] / "pyproject.toml"
+        if py.exists():
+            with py.open("rb") as fh:
+                data = tomllib.load(fh)
+            ver = data.get("project", {}).get("version")
+            if ver:
+                return ver
+            ver = data.get("tool", {}).get("poetry", {}).get("version")
+            if ver:
+                return ver
+    except Exception:
+        pass
+    return "0.0.0"
+
+
+def __getattr__(name: str):
+    if name == "__version__":
+        return version()
+    raise AttributeError(name)
+
 
 __all__ = [
     "get_line",

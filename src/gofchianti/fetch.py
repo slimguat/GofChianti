@@ -1,8 +1,8 @@
 """Cache directory management and on-demand dataset downloading.
 
-The GofChianti dataset (precomputed ``G(T, n_e)`` ``.npz`` files, CHIANTI
+The GofChianti dataset (precomputed ``G(n_e, T)`` ``.npz`` files, CHIANTI
 ``.abund`` abundance files and the line catalogue) is hosted as flat release
-assets on GitHub (and, in the future, a lab server).  Files are downloaded the
+assets on GitHub.  Files are downloaded the
 first time they are needed and cached on disk so the tool works offline
 afterwards.
 
@@ -47,7 +47,7 @@ __all__ = [
 
 # Default remote location (GitHub release "latest" assets).  Overridable with
 # the GOFCHIANTI_BASE_URL environment variable or :func:`set_base_url` so the
-# dataset can later be served from a lab URL without code changes.
+#TODO: In the future the dataset can be served from a lab URL without code changes. So set th needed tests for this chang by then.
 _DEFAULT_BASE_URL = "https://github.com/slimguat/GofChianti/releases/latest/download/"
 
 MANIFEST_NAME = "manifest.json"
@@ -290,7 +290,7 @@ def fetch_file(name: str, kind: str, *, expected_sha256: Optional[str] = None) -
 
 
 def fetch_data_file(filename: str) -> Path:
-    """Fetch a precomputed ``G(T, n_e)`` ``.npz`` file."""
+    """Fetch a precomputed ``G(n_e, T)`` ``.npz`` file."""
     return fetch_file(filename, "data")
 
 
@@ -329,9 +329,11 @@ def download_all(kinds: Optional[List[str]] = None, *, verbose: bool = True) -> 
             continue
         if verbose:
             print(f"[gofchianti] fetching {name} ...")
-        paths.append(fetch_file(name, kind, expected_sha256=entry.get("sha256")))
+        paths.append(fetch_file(
+            name, kind, expected_sha256=entry.get("sha256")))
     if verbose:
-        print(f"[gofchianti] dataset ready in {get_cache_dir()} ({len(paths)} files).")
+        print(
+            f"[gofchianti] dataset ready in {get_cache_dir()} ({len(paths)} files).")
     return paths
 
 

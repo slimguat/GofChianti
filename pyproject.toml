@@ -8,13 +8,16 @@ dependencies = [
   "pyarrow>=10.0",
   "platformdirs>=2.5",
 ]
-description = "Lightweight Python access to precomputed CHIANTI contribution functions G(T, ne)."
+description = "Lightweight Python access to precomputed CHIANTI contribution functions G(ne, T)."
 keywords = ["CHIANTI", "contribution function", "gofnt", "solar", "spectroscopy"]
 license = {text = "MIT"}
 name = "gofchianti"
 readme = "README.md"
 requires-python = ">=3.9"
 version = "0.1.0"
+
+[project.scripts]
+gofchianti-build-dataset = "gofchianti.cli:main"
 
 [project.optional-dependencies]
 # Only needed by maintainers who regenerate the dataset from IDL output.
@@ -34,5 +37,5 @@ requires = ["poetry-core>=2.0"]
 
 [dependency-groups]
 dev = [
-    "pytest (>=8.3,<9.0)"
+  "pytest (>=8.3)",
 ]
