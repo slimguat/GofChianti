@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+
+# Poetry
+poetry.lock
+
+# Caches / test artifacts
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Maintainer dataset build output (large; published via GitHub releases)
+dataset/
+
+# OS
+.DS_Store
