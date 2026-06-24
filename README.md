@@ -67,6 +67,74 @@ environment variable or `gc.set_cache_dir(...)`. Clear it with
 
 ## For maintainers
 
-Regenerating the dataset from IDL `.dat` output is a maintainer task and lives in
-[`maintainers/convert_dat_to_npz.py`](maintainers/convert_dat_to_npz.py). It is
-**not** part of the installed package. See that file's docstring for details.
+Regenerating and publishing the dataset is a **maintainer-only** task. None of
+this is part of the installed package — end users only ever `pip install
+gofchianti` and call the API above.
+
+### Prerequisites
+
+- **IDL + SSW/CHIANTI** to compute the raw `G(T, nₑ)` tables. The exact IDL
+  routines used to produce the `*_gofnt_v-*.dat` files are vendored, for
+  reference, under [`maintainers/idl/`](maintainers/idl/)
+  (`compute_gofnt.pro`, `chi_find_transition.pro`).
+- A local CHIANTI **abundance** directory, e.g.
+  `/usr/local/ssw/packages/chianti/dbase/abundance`.
+- The **[`gh`](https://cli.github.com/) CLI**, authenticated
+  (`gh auth login`), for publishing releases.
+- The dev/maintainer dependencies:
+
+  ```bash
+  pip install -e ".[dev]"     # tests
+  pip install -e ".[maintainer]"  # ChiantiPy, only if you regenerate inputs
+  ```
+
+### 1. Regenerate the dataset
+
+Convert the IDL `.dat` output into the shippable dataset (per-line `.npz`,
+`catalog.parquet`, the bundled abundance files and a hashed `manifest.json`):
+
+```bash
+python maintainers/convert_dat_to_npz.py \
+    --dat-dir ../gofnt \
+    --abund-src /usr/local/ssw/packages/chianti/dbase/abundance \
+    --out-dir ./dataset
+```
+
+The same tool is exposed as a console script after install:
+
+```bash
+gofchianti-build-dataset --dat-dir ../gofnt --out-dir ./dataset
+```
+
+The build also refreshes the catalogue bundled inside the package
+(`src/gofchianti/data/catalog.parquet`) so `available_lines()` works offline.
+Pass `--package-data-dir ""` to skip that bundling. The `dataset/` directory
+itself is git-ignored — it is distributed as release assets, not committed.
+
+### 2. Publish a release
+
+Build and upload every asset to a GitHub release via `gh` (idempotent;
+re-uploads with `--clobber`). The tag defaults to `dataset-v<dataset_version>`:
+
+```bash
+# Validate the asset list and commands without touching the remote:
+python maintainers/convert_dat_to_npz.py --dat-dir ../gofnt --out-dir ./dataset \
+    --dry-run-upload --verbose 1
+
+# Publish for real:
+python maintainers/convert_dat_to_npz.py --dat-dir ../gofnt --out-dir ./dataset \
+    --upload --repo slimguat/GofChianti --verbose 1
+```
+
+End users download from the repository's `releases/latest/download/` assets, so
+the release that should be served to users must be marked **latest**.
+
+### 3. Run the tests
+
+```bash
+pytest
+```
+
+The suite runs fully offline against the freshly built `dataset/`. See
+[`maintainers/convert_dat_to_npz.py`](maintainers/convert_dat_to_npz.py) for the
+converter's full docstring and the IDL output quirks it handles.

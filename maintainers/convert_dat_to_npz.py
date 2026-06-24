@@ -471,7 +471,8 @@ def upload_release(
             *map(str, assets), "--clobber"],
         check=True,
     )
-    _vprint(verbose, 0, f"Uploaded {len(assets)} assets to {repo} release '{tag}'.")
+    _vprint(
+        verbose, 0, f"Uploaded {len(assets)} assets to {repo} release '{tag}'.")
     return assets
 
 
@@ -507,7 +508,8 @@ def main(argv: Optional[List[str]] = None) -> None:
     p.add_argument("--tag", default=None,
                    help="Release tag (default: 'dataset-v<dataset_version>').")
     args = p.parse_args(argv)
-    pkg_data = Path(args.package_data_dir) if args.package_data_dir.strip() else None
+    pkg_data = Path(
+        args.package_data_dir) if args.package_data_dir.strip() else None
     out_dir = build_dataset(args.dat_dir, args.abund_src, args.out_dir,
                             package_data_dir=pkg_data, verbose=int(args.verbose))
 

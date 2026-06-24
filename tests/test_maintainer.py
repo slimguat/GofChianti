@@ -40,10 +40,12 @@ def test_upload_dry_run_does_not_invoke_subprocess(dataset_available, monkeypatc
         pytest.skip("GitHub CLI 'gh' not available")
 
     def fail(*args, **kwargs):  # pragma: no cover - must never run
-        raise AssertionError("subprocess.run must not be called during dry-run")
+        raise AssertionError(
+            "subprocess.run must not be called during dry-run")
 
     monkeypatch.setattr(subprocess, "run", fail)
-    assets = upload_release(dataset_available, "owner/repo", "tag", dry_run=True)
+    assets = upload_release(
+        dataset_available, "owner/repo", "tag", dry_run=True)
     # 56 npz + >=1 abund + catalog + manifest.
     assert len(assets) >= 59
     assert [a.name for a in assets][-2:] == ["catalog.parquet", "manifest.json"]

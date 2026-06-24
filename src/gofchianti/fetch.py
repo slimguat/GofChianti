@@ -47,7 +47,7 @@ __all__ = [
 
 # Default remote location (GitHub release "latest" assets).  Overridable with
 # the GOFCHIANTI_BASE_URL environment variable or :func:`set_base_url` so the
-#TODO: In the future the dataset can be served from a lab URL without code changes. So set th needed tests for this chang by then.
+# TODO: In the future the dataset can be served from a lab URL without code changes. So set th needed tests for this chang by then.
 _DEFAULT_BASE_URL = "https://github.com/slimguat/GofChianti/releases/latest/download/"
 
 MANIFEST_NAME = "manifest.json"

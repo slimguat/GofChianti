@@ -43,7 +43,8 @@ def isolated_cache(tmp_path, monkeypatch):
 @pytest.fixture(scope="session")
 def dataset_available():
     if not (DATASET_DIR / "manifest.json").exists():
-        pytest.skip("dataset not built; run maintainers/convert_dat_to_npz.py first")
+        pytest.skip(
+            "dataset not built; run maintainers/convert_dat_to_npz.py first")
     return DATASET_DIR
 
 
