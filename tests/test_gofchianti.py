@@ -23,14 +23,16 @@ GOFNT_UNIT = u.erg * u.cm**3 / (u.s * u.sr)
 # --------------------------------------------------------------------------- #
 def test_asterisk_wavelength_recovered_from_filename(dataset_available):
     """h_1 1025.723 had a '*******' header; λ must be recovered from the name."""
-    cf = ContributionFunction.from_npz(DATASET_DIR / "data" / "h_1_1025.723_v-11.0.2.npz")
+    cf = ContributionFunction.from_npz(
+        DATASET_DIR / "data" / "h_1_1025.723_v-11.0.2.npz")
     assert cf.ion.lower() == "h_1"
     assert cf.wavelength == pytest.approx(1025.723, abs=1e-3)
 
 
 def test_abundance_file_is_basename_not_path(dataset_available):
     """The wrapped abundance path must be reduced to a basename."""
-    cf = ContributionFunction.from_npz(DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
+    cf = ContributionFunction.from_npz(
+        DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
     assert cf.source_abundance_file == "sun_photospheric_2021_asplund.abund"
     assert "/" not in cf.source_abundance_file
 
@@ -39,7 +41,8 @@ def test_abundance_file_is_basename_not_path(dataset_available):
 # Stored data is bare; abundance round-trips exactly
 # --------------------------------------------------------------------------- #
 def test_stored_gofnt_is_bare(dataset_available):
-    cf = ContributionFunction.from_npz(DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
+    cf = ContributionFunction.from_npz(
+        DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
     assert cf.abundance_applied is False
 
 
@@ -47,14 +50,17 @@ def test_abundance_roundtrip_matches_original_idl(dataset_available):
     """bare_G × (Fe/H) must reproduce the original abundance-multiplied .dat."""
     from maintainers.convert_dat_to_npz import parse_gofnt_dat  # noqa: WPS433
 
-    dat = Path(__file__).resolve().parent.parent.parent / "gofnt" / "fe_12_195.119_gofnt_v-11.0.2.dat"
+    dat = Path(__file__).resolve().parent.parent.parent / \
+        "gofnt" / "fe_12_195.119_gofnt_v-11.0.2.dat"
     raw = parse_gofnt_dat(dat)  # original, abundance applied
     assert raw.abundance_applied is True
 
-    bare = ContributionFunction.from_npz(DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
+    bare = ContributionFunction.from_npz(
+        DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
     factor = parse_abund_file(ABUND_SRC / (ASPLUND + ".abund"))[26]  # Fe
 
-    np.testing.assert_allclose(bare.gofnt_matrix * factor, raw.gofnt_matrix, rtol=1e-10, atol=0.0)
+    np.testing.assert_allclose(
+        bare.gofnt_matrix * factor, raw.gofnt_matrix, rtol=1e-10, atol=0.0)
 
 
 # --------------------------------------------------------------------------- #
@@ -65,7 +71,8 @@ def test_available_lines_dataframe():
     assert len(df) > 0
     for col in ("ion", "wavelength", "chianti_version", "f_value", "A_value", "filename"):
         assert col in df.columns
-    assert (gc.available_lines(version="11.0.2")["chianti_version"] == "11.0.2").all()
+    assert (gc.available_lines(version="11.0.2")[
+            "chianti_version"] == "11.0.2").all()
 
 
 def test_get_line_bare(dataset_available):
@@ -91,7 +98,8 @@ def test_get_line_with_abundance_scales_by_factor(dataset_available):
 
 
 def test_interpolation_recovers_grid_values(dataset_available):
-    cf = ContributionFunction.from_npz(DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
+    cf = ContributionFunction.from_npz(
+        DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
     di, ti = 5, 10
     n = cf.densities[di] * u.cm**-3
     t = cf.temperature[ti] * u.K

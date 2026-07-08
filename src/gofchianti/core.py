@@ -70,7 +70,8 @@ class ContributionFunction:
 
     # Runtime-only state (not serialised).
     get_abundance: bool = field(default=False, compare=False)
-    abundance: Optional[Abundance] = field(default=None, repr=False, compare=False)
+    abundance: Optional[Abundance] = field(
+        default=None, repr=False, compare=False)
     interpolator: Optional[RegularGridInterpolator] = field(
         default=None, repr=False, compare=False
     )
@@ -209,7 +210,8 @@ class ContributionFunction:
         ne_q, temp_q = resolve_ne_temperature(
             density=density, temperature=temperature, pressure=pressure
         )
-        density_val = np.atleast_1d(np.asarray(ne_q.to_value(u.cm**-3), dtype=float))
+        density_val = np.atleast_1d(np.asarray(
+            ne_q.to_value(u.cm**-3), dtype=float))
         temperature_val = np.atleast_1d(
             np.asarray(temp_q.to_value(u.K), dtype=float))
 
@@ -234,7 +236,8 @@ class ContributionFunction:
             log_dens_grid = np.log10(np.asarray(self.densities, dtype=float))
             log_temp_grid = np.log10(np.asarray(self.temperature, dtype=float))
             with np.errstate(divide="ignore"):
-                log_g_grid = np.log10(np.asarray(self.gofnt_matrix, dtype=float))
+                log_g_grid = np.log10(np.asarray(
+                    self.gofnt_matrix, dtype=float))
             expected = (log_dens_grid.size, log_temp_grid.size)
             if log_g_grid.shape != expected:
                 raise ValueError(
