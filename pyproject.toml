@@ -1,5 +1,5 @@
 [project]
-authors = [{name = "GofChianti maintainers"}]
+authors = [{name = "GofChianti maintainers"}, {name = "slimane mzerguat"}]
 dependencies = [
   "numpy>=1.21",
   "scipy>=1.7",
