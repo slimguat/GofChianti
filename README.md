@@ -20,6 +20,7 @@ pip install gofchianti
 ## Quick start
 
 ```python
+import astropy.units as u
 import gofchianti as gc
 
 # 1. What is available?
@@ -29,12 +30,18 @@ df = gc.available_lines(version="11.0.2")
 # 2. Load a line (downloaded + cached on first use, offline afterwards).
 cf = gc.get_line("Fe_12", 195.119)
 
-# 3. Evaluate the *bare* contribution function G(T, nₑ).
-g = cf.get_gofnt(density=1e9, temperature=1.5e6)
+# 3. Evaluate the *bare* contribution function G(nₑ, T).
+#    Inputs are astropy Quantities; the result is a Quantity too.
+g = cf.get_gofnt(density=1e9 * u.cm**-3, temperature=1.5e6 * u.K)
+
+# 3b. Give any two of (density, temperature, pressure). Pressure may be a
+#     reduced pressure nₑ*T (cm^-3 K, CHIANTI-style) or a thermal pressure (Pa).
+g = cf.get_gofnt(pressure=1e15 * u.cm**-3 * u.K, temperature=1.5e6 * u.K)
+g = cf.get_gofnt(pressure=0.02 * u.Pa, density=1e9 * u.cm**-3)
 
 # 4. Abundance-scaled values: multiply by Fe/H from a CHIANTI abundance set.
 cf = gc.get_line("Fe_12", 195.119, abundance="sun_photospheric_2021_asplund")
-g = cf.get_gofnt(1e9, 1.5e6)         # now × Fe/H
+g = cf.get_gofnt(density=1e9 * u.cm**-3, temperature=1.5e6 * u.K)  # now × Fe/H
 ```
 
 ## Abundances

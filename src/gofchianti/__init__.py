@@ -2,16 +2,25 @@
 
 Typical use::
 
+    import astropy.units as u
     import gofchianti as gc
 
     gc.available_lines()                    # what is available (DataFrame)
     cf = gc.get_line("Fe_12", 195.119)      # download + cache + load
-    g = cf.get_gofnt(1e9, 1.5e6)            # bare G at (n_e, T)
+    g = cf.get_gofnt(density=1e9 * u.cm**-3, # bare G at (n_e, T)
+                     temperature=1.5e6 * u.K)
+
+    # any two of (density, temperature, pressure) may be given
+    g = cf.get_gofnt(pressure=1e15 * u.cm**-3 * u.K,  # reduced pressure n_e*T
+                     temperature=1.5e6 * u.K)
+    g = cf.get_gofnt(pressure=0.02 * u.Pa,            # thermal pressure
+                     density=1e9 * u.cm**-3)
 
     # abundance-scaled values
     cf = gc.get_line("Fe_12", 195.119,
                      abundance="sun_photospheric_2021_asplund")
-    g = cf.get_gofnt(1e9, 1.5e6)            # now multiplied by Fe/H
+    g = cf.get_gofnt(density=1e9 * u.cm**-3,  # now multiplied by Fe/H
+                     temperature=1.5e6 * u.K)
 """
 
 from __future__ import annotations

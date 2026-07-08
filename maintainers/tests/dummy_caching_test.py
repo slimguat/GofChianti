@@ -60,6 +60,7 @@ def main() -> int:
         os.environ.pop("GOFCHIANTI_DATASET_DIR", None)
 
     import numpy as np
+    import astropy.units as u
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -115,7 +116,8 @@ def main() -> int:
     for _, r in df.iterrows():
         cf = gc.get_line(str(r["ion"]), float(r["wavelength"]))
         _ = cf.get_gofnt(
-            args.density, cf.temperature[len(cf.temperature) // 2])
+            density=args.density * u.cm**-3,
+            temperature=cf.temperature[len(cf.temperature) // 2] * u.K)
         ok += 1
     print(
         f"served {ok}/{len(df)} lines purely from cache (network was unreachable)")
@@ -136,7 +138,8 @@ def main() -> int:
         ion, wl = str(r["ion"]), float(r["wavelength"])
         cf = gc.get_line(ion, wl)
         T = np.asarray(cf.temperature, dtype=float)
-        g = cf.get_gofnt(args.density, T)
+        g = cf.get_gofnt(density=args.density * u.cm**-3,
+                         temperature=T * u.K).value
         g = np.where(g > 0, g, np.nan)
         el = ion.split("_")[0].title()
         ax.plot(T, g, color=ecolour[el], alpha=0.75, lw=1.2)

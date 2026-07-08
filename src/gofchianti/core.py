@@ -13,11 +13,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
 
+import astropy.units as u
 import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import RegularGridInterpolator
 
 from .abundance import Abundance, coerce_abundance, element_to_z, z_to_symbol
+from .units import parse_gofnt_units, resolve_ne_temperature
 
 # Metadata keys serialised alongside the arrays in the ``.npz`` file.
 _META_KEYS = (
@@ -86,6 +88,11 @@ class ContributionFunction:
         """Atomic number of the ion."""
         return element_to_z(self.ion)
 
+    @property
+    def gofnt_unit(self) -> u.UnitBase:
+        """Astropy unit of the stored ``G(n_e, T)`` (from :attr:`units`)."""
+        return parse_gofnt_units(self.units)
+
     def __repr__(self) -> str:
         YELLOW, RESET = "\033[93m", "\033[0m"
         ab = "+abund" if self.get_abundance else "bare"
@@ -153,45 +160,75 @@ class ContributionFunction:
     # ------------------------------------------------------------------ #
     def get_gofnt(
         self,
-        density: Union[float, NDArray],
-        temperature: Union[float, NDArray],
+        density: Optional[u.Quantity] = None,
+        temperature: Optional[u.Quantity] = None,
+        pressure: Optional[u.Quantity] = None,
         include_abundance: Optional[bool] = None,
         recompute_interpolation: bool = False,
-    ) -> NDArray:
-        """Interpolate ``G(T, n_e)`` at the requested density/temperature.
+    ) -> u.Quantity:
+        """Interpolate ``G(n_e, T)`` at the requested plasma state.
+
+        The plasma state is given as :class:`astropy.units.Quantity` objects.
+        Provide *any two* of ``density``, ``temperature`` and ``pressure``; the
+        third variable of the ``(n_e, T)`` grid is derived internally and the
+        result is interpolated on that grid.
 
         Parameters
         ----------
-        density, temperature : float or ndarray
-            Query points (cm^-3 and K).  Either may be scalar; otherwise they
-            must broadcast to a common shape.
+        density : `~astropy.units.Quantity`, optional
+            Electron density, convertible to ``cm^-3``.
+        temperature : `~astropy.units.Quantity`, optional
+            Temperature, convertible to ``K``.
+        pressure : `~astropy.units.Quantity`, optional
+            Either a *thermal* pressure (convertible to ``Pa``, i.e.
+            ``P = n_e k_B T``) or a *reduced* pressure ``n_e * T`` (convertible
+            to ``cm^-3 K``, CHIANTI-style, no ``k_B``).  The two are told apart
+            by their units.
         include_abundance : bool, optional
             Whether to multiply by the attached elemental abundance.  Defaults
             to the instance flag :attr:`get_abundance`.
         recompute_interpolation : bool
             Force rebuilding of the cached interpolator.
+
+        Returns
+        -------
+        `~astropy.units.Quantity`
+            ``G(n_e, T)`` carrying the stored data units (see
+            :attr:`gofnt_unit`).  Scalar inputs yield a length-1 array.
+
+        Examples
+        --------
+        >>> import astropy.units as u
+        >>> cf.get_gofnt(density=1e9 * u.cm**-3, temperature=1.5e6 * u.K)
+        >>> cf.get_gofnt(pressure=1e15 * u.cm**-3 * u.K, temperature=1.5e6 * u.K)
+        >>> cf.get_gofnt(pressure=0.02 * u.Pa, density=1e9 * u.cm**-3)
         """
         if include_abundance is None:
             include_abundance = self.get_abundance
 
-        density = np.atleast_1d(np.asarray(density, dtype=float))
-        temperature = np.atleast_1d(np.asarray(temperature, dtype=float))
+        ne_q, temp_q = resolve_ne_temperature(
+            density=density, temperature=temperature, pressure=pressure
+        )
+        density_val = np.atleast_1d(np.asarray(ne_q.to_value(u.cm**-3), dtype=float))
+        temperature_val = np.atleast_1d(
+            np.asarray(temp_q.to_value(u.K), dtype=float))
 
         if (
-            density.shape != temperature.shape
-            and density.size > 1
-            and temperature.size > 1
+            density_val.shape != temperature_val.shape
+            and density_val.size > 1
+            and temperature_val.size > 1
         ):
             raise ValueError(
                 "Density and temperature arrays must share a shape or one must "
-                f"be scalar-like. Got {density.shape} and {temperature.shape}."
+                f"be scalar-like. Got {density_val.shape} and {temperature_val.shape}."
             )
-        if density.shape != temperature.shape:
-            density, temperature = np.broadcast_arrays(density, temperature)
+        if density_val.shape != temperature_val.shape:
+            density_val, temperature_val = np.broadcast_arrays(
+                density_val, temperature_val)
 
-        original_shape = density.shape
-        log_dens_q = np.log10(density.ravel())
-        log_temp_q = np.log10(temperature.ravel())
+        original_shape = density_val.shape
+        log_dens_q = np.log10(density_val.ravel())
+        log_temp_q = np.log10(temperature_val.ravel())
 
         if self.interpolator is None or recompute_interpolation:
             log_dens_grid = np.log10(np.asarray(self.densities, dtype=float))
@@ -216,7 +253,7 @@ class ContributionFunction:
 
         if include_abundance:
             g = g * self._abundance_factor()
-        return g
+        return g * self.gofnt_unit
 
     # ------------------------------------------------------------------ #
     # Serialisation

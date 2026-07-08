@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import astropy.units as u
 import numpy as np
 import pytest
 
@@ -14,6 +15,7 @@ from gofchianti.core import ContributionFunction
 from conftest import ABUND_SRC, DATASET_DIR
 
 ASPLUND = "sun_photospheric_2021_asplund"
+GOFNT_UNIT = u.erg * u.cm**3 / (u.s * u.sr)
 
 
 # --------------------------------------------------------------------------- #
@@ -70,9 +72,11 @@ def test_get_line_bare(dataset_available):
     cf = gc.get_line("Fe_12", 195.119)
     assert isinstance(cf, ContributionFunction)
     assert cf.get_abundance is False
-    g = cf.get_gofnt(1e9, 1.5e6)
-    assert np.ndim(g) == 0 or g.shape == (1,)
-    assert np.isfinite(g).all() and (np.asarray(g) > 0).all()
+    g = cf.get_gofnt(density=1e9 * u.cm**-3, temperature=1.5e6 * u.K)
+    assert isinstance(g, u.Quantity)
+    assert g.unit.is_equivalent(GOFNT_UNIT)
+    assert g.shape == (1,)
+    assert np.isfinite(g.value).all() and (g.value > 0).all()
 
 
 def test_get_line_with_abundance_scales_by_factor(dataset_available):
@@ -80,34 +84,34 @@ def test_get_line_with_abundance_scales_by_factor(dataset_available):
     cf_ab = gc.get_line("Fe_12", 195.119, abundance=ASPLUND)
     factor = parse_abund_file(ABUND_SRC / (ASPLUND + ".abund"))[26]
 
-    n, t = 1e9, 1.5e6
-    g_bare = np.asarray(cf_bare.get_gofnt(n, t))
-    g_ab = np.asarray(cf_ab.get_gofnt(n, t))
+    n, t = 1e9 * u.cm**-3, 1.5e6 * u.K
+    g_bare = cf_bare.get_gofnt(n, t).value
+    g_ab = cf_ab.get_gofnt(n, t).value
     np.testing.assert_allclose(g_ab, g_bare * factor, rtol=1e-10)
 
 
 def test_interpolation_recovers_grid_values(dataset_available):
     cf = ContributionFunction.from_npz(DATASET_DIR / "data" / "fe_12_195.119_v-11.0.2.npz")
     di, ti = 5, 10
-    n = cf.densities[di]
-    t = cf.temperature[ti]
-    g = np.asarray(cf.get_gofnt(n, t)).ravel()[0]
+    n = cf.densities[di] * u.cm**-3
+    t = cf.temperature[ti] * u.K
+    g = cf.get_gofnt(n, t).value.ravel()[0]
     assert g == pytest.approx(cf.gofnt_matrix[di, ti], rel=1e-6)
 
 
 def test_set_abundance_toggle(dataset_available):
     cf = gc.get_line("Fe_12", 195.119)
-    n, t = 1e9, 1.5e6
-    bare = np.asarray(cf.get_gofnt(n, t))
+    n, t = 1e9 * u.cm**-3, 1.5e6 * u.K
+    bare = cf.get_gofnt(n, t).value
     factor = parse_abund_file(ABUND_SRC / (ASPLUND + ".abund"))[26]  # Fe/H < 1
     cf.set_abundance(ASPLUND)
     assert cf.get_abundance is True
-    scaled = np.asarray(cf.get_gofnt(n, t))
+    scaled = cf.get_gofnt(n, t).value
     np.testing.assert_allclose(scaled, bare * factor, rtol=1e-10)
     assert not np.allclose(scaled, bare, rtol=1e-6, atol=0.0)
     cf.set_abundance(None)
     assert cf.get_abundance is False
-    np.testing.assert_allclose(np.asarray(cf.get_gofnt(n, t)), bare, rtol=1e-12)
+    np.testing.assert_allclose(cf.get_gofnt(n, t).value, bare, rtol=1e-12)
 
 
 # --------------------------------------------------------------------------- #
