@@ -65,12 +65,28 @@ gc.download_all()        # fetch the entire dataset into the cache, once
 
 After that everything works with no network access.
 
-## Cache
+## Cache & configuration
 
 Downloaded files live in an OS-standard cache directory
-(`~/.cache/gofchianti` on Linux). Override it with the `GOFCHIANTI_CACHE`
-environment variable or `gc.set_cache_dir(...)`. Clear it with
-`gc.clear_cache()`.
+(`~/.cache/gofchianti` on Linux) and everything works offline after the first
+download. Every setting is available both as a function call and as an
+environment variable. All variables are prefixed `GOFCHIANTI_` so they are easy
+to find in your shell profile:
+
+| Setting | Function | Environment variable |
+| --- | --- | --- |
+| Cache directory | `gc.set_cache_dir(path)` | `GOFCHIANTI_CACHE` |
+| Local dataset dir (used instead of downloading) | `gc.set_dataset_dir(path)` | `GOFCHIANTI_DATASET_DIR` |
+| Download base URL | `gc.set_base_url(url)` | `GOFCHIANTI_BASE_URL` |
+
+By default the dataset is downloaded from the IAS SPICE data server:
+
+```
+https://spice.osups.universite-paris-saclay.fr/spice-data/contribution_functions/
+```
+
+Point `GOFCHIANTI_BASE_URL` (or `gc.set_base_url(...)`) elsewhere to use a
+mirror or a local copy. Clear the cache with `gc.clear_cache()`.
 
 ## For maintainers
 
@@ -86,8 +102,10 @@ gofchianti` and call the API above.
   (`compute_gofnt.pro`, `chi_find_transition.pro`).
 - A local CHIANTI **abundance** directory, e.g.
   `/usr/local/ssw/packages/chianti/dbase/abundance`.
-- The **[`gh`](https://cli.github.com/) CLI**, authenticated
-  (`gh auth login`), for publishing releases.
+- **[`rsync`](https://rsync.samba.org/)** with SSH access to the web server
+  that hosts the dataset (the default publishing backend).
+- Optionally the **[`gh`](https://cli.github.com/) CLI**, authenticated
+  (`gh auth login`), if you also publish a GitHub release (secondary backend).
 - The dev/maintainer dependencies:
 
   ```bash
@@ -118,23 +136,61 @@ The build also refreshes the catalogue bundled inside the package
 Pass `--package-data-dir ""` to skip that bundling. The `dataset/` directory
 itself is git-ignored — it is distributed as release assets, not committed.
 
-### 2. Publish a release
+### 2. Publish the dataset
 
-Build and upload every asset to a GitHub release via `gh` (idempotent;
-re-uploads with `--clobber`). The tag defaults to `dataset-v<dataset_version>`:
+Publishing copies the flat asset set (per-line `.npz`, the `.abund` files,
+`catalog.parquet` and `manifest.json`) to wherever end users download it from.
+`rsync` over SSH is the **default** backend; a GitHub release via `gh` is a
+secondary option. Add `--publish` to publish for real, or `--dry-run` to print
+and validate the actions without touching the remote.
+
+#### rsync over SSH (default)
+
+The destination is an `rsync`/`ssh` target `user@host:/path/`, given with
+`--dest` or the `GOFCHIANTI_UPLOAD_DEST` environment variable. Files are sent
+*flat* so they line up with the flat download URL, and `rsync` only transfers
+what changed (safe to re-run):
 
 ```bash
-# Validate the asset list and commands without touching the remote:
+# Validate the asset list + command without touching the remote:
 python maintainers/convert_dat_to_npz.py --dat-dir ../gofnt --out-dir ./dataset \
-    --dry-run-upload --verbose 1
+    --dry-run --verbose 1
 
-# Publish for real:
+# Publish for real (destination via flag or GOFCHIANTI_UPLOAD_DEST):
 python maintainers/convert_dat_to_npz.py --dat-dir ../gofnt --out-dir ./dataset \
-    --upload --repo slimguat/GofChianti --verbose 1
+    --publish \
+    --dest user@host:/var/www/spice-data/contribution_functions/ \
+    --verbose 1
 ```
 
-End users download from the repository's `releases/latest/download/` assets, so
-the release that should be served to users must be marked **latest**.
+**Authentication.** For security the tool never stores or forwards a password
+itself — authentication is delegated to `ssh`:
+
+- **SSH key** — pass `--ssh-key /path/to/key` (or set `GOFCHIANTI_SSH_KEY`). A
+  key already loaded in `ssh-agent` needs no argument and allows fully
+  unattended runs.
+- **Interactive** — with no key, `ssh` prompts for the password or key
+  passphrase directly, in real time; the secret is typed into `ssh` and never
+  passes through this tool.
+
+> Password-from-file / password-from-env piping (e.g. `sshpass`) is
+> intentionally **not** supported: it would expose the secret in the process
+> list and on disk. Use an SSH key or `ssh-agent` for automation.
+
+The public download URL matching the example destination above is
+`https://spice.osups.universite-paris-saclay.fr/spice-data/contribution_functions/`.
+
+#### GitHub release (secondary)
+
+```bash
+python maintainers/convert_dat_to_npz.py --dat-dir ../gofnt --out-dir ./dataset \
+    --publish --target github --repo OWNER/NAME --verbose 1
+```
+
+The tag defaults to `dataset-v<dataset_version>` and the upload is idempotent
+(re-uploads with `--clobber`). Use `--target both` to publish to the web server
+and a GitHub release in one run. End users only fetch from
+`releases/latest/download/` if you also point `GOFCHIANTI_BASE_URL` there.
 
 ### 3. Run the tests
 

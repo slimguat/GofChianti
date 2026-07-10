@@ -1,8 +1,8 @@
 """Cache directory management and on-demand dataset downloading.
 
 The GofChianti dataset (precomputed ``G(n_e, T)`` ``.npz`` files, CHIANTI
-``.abund`` abundance files and the line catalogue) is hosted as flat release
-assets on GitHub.  Files are downloaded the
+``.abund`` abundance files and the line catalogue) is hosted as flat files on
+the IAS SPICE data server.  Files are downloaded the
 first time they are needed and cached on disk so the tool works offline
 afterwards.
 
@@ -45,10 +45,11 @@ __all__ = [
     "download_all",
 ]
 
-# Default remote location (GitHub release "latest" assets).  Overridable with
-# the GOFCHIANTI_BASE_URL environment variable or :func:`set_base_url` so the
-# TODO: In the future the dataset can be served from a lab URL without code changes. So set th needed tests for this chang by then.
-_DEFAULT_BASE_URL = "https://github.com/slimguat/GofChianti/releases/latest/download/"
+# Default remote location: the IAS SPICE data server, which serves the dataset
+# files flat over HTTPS.  Overridable with the GOFCHIANTI_BASE_URL environment
+# variable or :func:`set_base_url` (e.g. to fall back to GitHub release assets
+# at "https://github.com/slimguat/GofChianti/releases/latest/download/").
+_DEFAULT_BASE_URL = "https://spice.osups.universite-paris-saclay.fr/spice-data/contribution_functions/"
 
 MANIFEST_NAME = "manifest.json"
 CATALOG_NAME = "catalog.parquet"

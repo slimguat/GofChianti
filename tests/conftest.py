@@ -35,6 +35,7 @@ def isolated_cache(tmp_path, monkeypatch):
 
     # Reset module-level state that may persist between tests.
     fetch._cache_dir_override = None
+    fetch._base_url_override = None
     fetch._manifest_cache = None
     fetch._manifest_fetched_at = 0.0
     yield

@@ -14,6 +14,7 @@ import pytest
 from maintainers.convert_dat_to_npz import (
     _release_assets,
     build_dataset,
+    publish_via_rsync,
     upload_release,
 )
 
@@ -46,6 +47,33 @@ def test_upload_dry_run_does_not_invoke_subprocess(dataset_available, monkeypatc
     monkeypatch.setattr(subprocess, "run", fail)
     assets = upload_release(
         dataset_available, "owner/repo", "tag", dry_run=True)
+    # 56 npz + >=1 abund + catalog + manifest.
+    assert len(assets) >= 59
+    assert [a.name for a in assets][-2:] == ["catalog.parquet", "manifest.json"]
+
+
+def test_publish_rsync_missing_assets_raises(tmp_path):
+    """Validation happens before any rsync/ssh interaction."""
+    with pytest.raises(FileNotFoundError):
+        publish_via_rsync(tmp_path, "user@host:/srv/data/", dry_run=True)
+
+
+def test_publish_rsync_requires_dest(dataset_available):
+    """A destination must be given explicitly or via GOFCHIANTI_UPLOAD_DEST."""
+    with pytest.raises(ValueError):
+        publish_via_rsync(dataset_available, None, dry_run=True)
+
+
+def test_publish_rsync_dry_run_does_not_invoke_subprocess(dataset_available, monkeypatch):
+    """Dry-run validates the asset list without touching the remote."""
+    def fail(*args, **kwargs):  # pragma: no cover - must never run
+        raise AssertionError(
+            "subprocess.run must not be called during dry-run")
+
+    monkeypatch.setattr(subprocess, "run", fail)
+    assets = publish_via_rsync(
+        dataset_available, "user@host:/srv/contribution_functions/",
+        dry_run=True)
     # 56 npz + >=1 abund + catalog + manifest.
     assert len(assets) >= 59
     assert [a.name for a in assets][-2:] == ["catalog.parquet", "manifest.json"]

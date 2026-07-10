@@ -10,7 +10,8 @@ the maintainers who generate the CHIANTI data with IDL/SSW to:
 4. copy the CHIANTI ``.abund`` files into the dataset,
 5. build ``catalog.parquet`` (also copied into the package for offline use) and
    ``manifest.json`` (with SHA256 hashes),
-6. optionally publish everything to a GitHub release via ``gh``.
+6. optionally publish everything to a public web server via ``rsync``/SSH
+   (default) or to a GitHub release via ``gh`` (secondary).
 
 IDL output quirks handled here
 ------------------------------
@@ -34,6 +35,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -409,6 +411,95 @@ def _release_assets(out_dir: Path) -> List[Path]:
     ]
 
 
+def publish_via_rsync(
+    out_dir: Path,
+    dest: Optional[str],
+    *,
+    ssh_key: Optional[str] = None,
+    dry_run: bool = False,
+    verbose: int = 0,
+) -> List[Path]:
+    """Publish the flat dataset asset set to ``dest`` via ``rsync`` over SSH.
+
+    This is the *default* publishing backend.  The assets are copied into a
+    directory that a web server exposes, so end users download them over HTTPS
+    (see :data:`gofchianti.fetch._DEFAULT_BASE_URL`).
+
+    ``dest`` is a standard rsync/ssh target, e.g.
+    ``user@host:/var/www/spice-data/contribution_functions/``.  Assets are sent
+    *flat* (by basename) to match the flat download URL used by
+    :mod:`gofchianti.fetch`.  ``rsync`` only transfers changed files, so the
+    operation is naturally idempotent.
+
+    Authentication / passwords
+    --------------------------
+    For security this function never reads, stores, or forwards a password
+    itself.  Authentication is delegated entirely to ``ssh``:
+
+    * ``ssh_key`` (or ``$GOFCHIANTI_SSH_KEY``) — path to a private key, used via
+      ``ssh -i``.  A key already loaded in ``ssh-agent`` works with no extra
+      arguments and enables fully unattended runs.
+    * Otherwise ``ssh`` prompts for the password / key passphrase **directly on
+      the terminal in real time**; the secret is typed into ``ssh`` and is
+      never seen by this process.
+
+    Piping a password from an env var or file (e.g. via ``sshpass``) is
+    intentionally *not* implemented: it would expose the secret in the process
+    table and on disk.  Use an SSH key or ``ssh-agent`` for automation.
+
+    Returns the list of asset paths that were (or would be) published.
+    """
+    out_dir = Path(out_dir)
+    assets = _release_assets(out_dir)
+
+    missing = [a for a in assets if not a.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "Cannot publish; missing dataset assets: "
+            + ", ".join(str(m) for m in missing)
+        )
+
+    if not dest:
+        raise ValueError(
+            "No rsync destination given; pass --dest or set "
+            "$GOFCHIANTI_UPLOAD_DEST "
+            "(e.g. 'user@host:/var/www/spice-data/contribution_functions/')."
+        )
+
+    # rsync needs a trailing slash on the destination directory so the files
+    # land *inside* it (flat), rather than the dir being renamed.
+    if not dest.endswith("/"):
+        dest = dest + "/"
+
+    cmd: List[str] = ["rsync", "-a", "-z", "--checksum", "--human-readable"]
+    if verbose >= 1:
+        cmd.append("-v")
+    if ssh_key:
+        key = str(Path(ssh_key).expanduser())
+        cmd += ["-e", f"ssh -i {key}"]
+    cmd += [str(a) for a in assets]
+    cmd.append(dest)
+
+    if dry_run:
+        _vprint(verbose, 0,
+                f"[dry-run] would publish {len(assets)} assets via rsync -> {dest}")
+        _vprint(verbose, 1, "[dry-run] " + " ".join(cmd))
+        for a in assets:
+            _vprint(verbose, 2, f"[dry-run] asset {a.name}")
+        return assets
+
+    if shutil.which("rsync") is None:
+        raise RuntimeError("'rsync' not found on PATH; install it to publish.")
+
+    _vprint(verbose, 0,
+            f"Publishing {len(assets)} assets via rsync -> {dest} ...")
+    # Inherit stdio so ssh can prompt for a password / key passphrase in real
+    # time; the secret goes straight to ssh and is never handled by this code.
+    subprocess.run(cmd, check=True)
+    _vprint(verbose, 0, f"Published {len(assets)} assets to {dest}.")
+    return assets
+
+
 def upload_release(
     out_dir: Path,
     repo: str,
@@ -419,7 +510,7 @@ def upload_release(
     dry_run: bool = False,
     verbose: int = 0,
 ) -> List[Path]:
-    """Publish all dataset assets to a GitHub release via ``gh`` (maintainer).
+    """Publish all dataset assets to a GitHub release via ``gh`` (secondary backend).
 
     The operation is idempotent: if the release ``tag`` already exists the
     assets are re-uploaded with ``--clobber``.  Pass ``dry_run=True`` to print
@@ -478,7 +569,8 @@ def upload_release(
 
 def main(argv: Optional[List[str]] = None) -> None:
     p = argparse.ArgumentParser(
-        description="Build the GofChianti dataset from IDL .dat files.")
+        description="Build (and optionally publish) the GofChianti dataset "
+                    "from IDL .dat files.")
     p.add_argument("--dat-dir", required=True, type=Path,
                    help="Directory of *_gofnt_v-*.dat files.")
     p.add_argument(
@@ -494,26 +586,59 @@ def main(argv: Optional[List[str]] = None) -> None:
         type=str,
         default=str(Path(__file__).resolve().parent.parent /
                     "src" / "gofchianti" / "data"),
-        help="Where to copy the bundled catalogue (pass an empty string to skip).",
+        help="Where to copy the bundled catalogue, resolved relative to this "
+             "script file (not the working directory). Pass an empty string "
+             "to skip bundling.",
     )
     p.add_argument("-v", "--verbose", type=int, default=0,
-                   help="Verbosity level (int)")
-    # --- Optional publishing to a GitHub release ---
-    p.add_argument("--upload", action="store_true",
-                   help="After building, publish the dataset to a GitHub release via 'gh'.")
-    p.add_argument("--dry-run-upload", action="store_true",
-                   help="Print the upload actions (and validate assets/gh) without touching the remote.")
-    p.add_argument("--repo", default="slimguat/GofChianti",
-                   help="GitHub 'owner/name' to publish to (with --upload).")
-    p.add_argument("--tag", default=None,
-                   help="Release tag (default: 'dataset-v<dataset_version>').")
+                   help="Verbosity level: 0 normal (default), 1 verbose, 2 debug.")
+
+    # --- Optional publishing (maintainer) -----------------------------------
+    pub = p.add_argument_group("publishing (maintainer)")
+    pub.add_argument("--publish", action="store_true",
+                     help="After building, publish the dataset (see --target).")
+    pub.add_argument("--dry-run", action="store_true",
+                     help="Print/validate publish actions without touching the remote.")
+    pub.add_argument("--target", choices=["rsync", "github", "both"],
+                     default="rsync",
+                     help="Publish backend: 'rsync' over SSH to a web server "
+                          "(default), 'github' release via gh, or 'both'.")
+    # rsync / SSH (default backend)
+    pub.add_argument("--dest", default=None,
+                     help="rsync/ssh destination 'user@host:/path/' "
+                          "(or env GOFCHIANTI_UPLOAD_DEST).")
+    pub.add_argument("--ssh-key", default=None,
+                     help="Path to an SSH private key for rsync (or env "
+                          "GOFCHIANTI_SSH_KEY). If omitted, ssh-agent or an "
+                          "interactive password/passphrase prompt is used.")
+    # GitHub release (secondary backend)
+    pub.add_argument("--repo", default=None,
+                     help="GitHub 'owner/name' to publish to "
+                          "(required for --target github/both).")
+    pub.add_argument("--tag", default=None,
+                     help="Release tag (default: 'dataset-v<dataset_version>').")
+
     args = p.parse_args(argv)
+    verbose = int(args.verbose)
     pkg_data = Path(
         args.package_data_dir) if args.package_data_dir.strip() else None
     out_dir = build_dataset(args.dat_dir, args.abund_src, args.out_dir,
-                            package_data_dir=pkg_data, verbose=int(args.verbose))
+                            package_data_dir=pkg_data, verbose=verbose)
 
-    if args.upload or args.dry_run_upload:
+    if not (args.publish or args.dry_run):
+        return
+
+    if args.target in ("rsync", "both"):
+        dest = args.dest or os.environ.get("GOFCHIANTI_UPLOAD_DEST")
+        ssh_key = args.ssh_key or os.environ.get("GOFCHIANTI_SSH_KEY")
+        publish_via_rsync(out_dir, dest, ssh_key=ssh_key,
+                          dry_run=args.dry_run, verbose=verbose)
+
+    if args.target in ("github", "both"):
+        if not args.repo:
+            raise SystemExit(
+                "--repo 'owner/name' is required for GitHub publishing "
+                "(--target github/both).")
         tag = args.tag
         if tag is None:
             manifest = json.loads((out_dir / "manifest.json").read_text())
@@ -522,7 +647,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 ver = ver[0] if ver else "0"
             tag = f"dataset-v{ver}"
         upload_release(out_dir, args.repo, tag,
-                       dry_run=args.dry_run_upload, verbose=int(args.verbose))
+                       dry_run=args.dry_run, verbose=verbose)
 
 
 if __name__ == "__main__":
